@@ -60,7 +60,7 @@
   .node text{fill:#e2e8f0;text-anchor:middle}
   .node .ic{font-size:30px}
   .node .nm{font-size:12px;font-weight:700}
-  .node .ad{font-size:10px;font-family:monospace;fill:#94a3b8}
+  .node .ad{font-size:11px;font-family:monospace;fill:#94a3b8}
   .node.act rect{stroke:#facc15;stroke-width:4}
   .node.dim{opacity:.55}
   #token{transition:transform .9s ease-in-out}
@@ -190,7 +190,7 @@ const TOPOLOGIES={
       {x:730,y:240,w:380,h:200,label:"Web · 192.0.2.0/24"}
     ],
     nodes:{
-      A:{x:80,y:130,ic:"💻",name:"PC-Origen",ip:"10.0.1.10",mac:"AA:01:00:00:00:10",layers:7,type:"host"},
+      A:{x:92,y:130,ic:"💻",name:"PC-Origen",ip:"10.0.1.10",mac:"AA:01:00:00:00:10",layers:7,type:"host"},
       S1:{x:235,y:230,ic:"🔀",name:"Switch Casa",layers:2,type:"switch"},
       R1:{x:390,y:230,ic:"📡",name:"Router Casa",layers:3,type:"router",
           ifs:[{ip:"10.0.1.1",mac:"BA:01:00:00:00:01"},{ip:"100.64.0.1",mac:"BA:01:00:00:00:02"}]},
@@ -264,18 +264,18 @@ function frameMacs(p,e){
 }
 
 /* ---------- red SVG ---------- */
-function nodeWidth(n){return n.type==="switch"?110:n.type==="router"?156:150;}
+function nodeWidth(n){return n.type==="switch"?132:n.type==="router"?160:154;}
 function drawNetwork(){
   const t=getTopo(); let svg="";
-  (t.zones||[]).forEach(z=>{svg+=`<rect class="zone" x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="14"/><text class="zlabel" x="${z.x+12}" y="${z.y+20}">${z.label}</text>`;});
+  (t.zones||[]).forEach(z=>{svg+=`<rect class="zone" x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="14"/><text class="zlabel" x="${z.x+12}" y="${z.y+z.h-10}">${z.label}</text>`;});
   t.edges.forEach(([a,b])=>{const A=t.nodes[a],B=t.nodes[b];svg+=`<line class="edge" id="${edgeId(a,b)}" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`;});
   for(const k in t.nodes){
     const n=t.nodes[k], lines=[], w=nodeWidth(n);
     if(n.type==="router") n.ifs.forEach((it,i)=>{lines.push(`eth${i}: ${it.ip}`);lines.push(it.mac)});
     else if(n.ip){lines.push(n.ip);lines.push(n.mac)}
     else lines.push("(capa 2: solo MAC)");
-    const h=50+lines.length*11;
-    svg+=`<g class="node" id="n_${k}"><rect x="${n.x-w/2}" y="${n.y-36}" width="${w}" height="${h}" rx="10"/><text class="ic" x="${n.x}" y="${n.y}">${n.ic}</text><text class="nm" x="${n.x}" y="${n.y+16}">${n.name}</text>${lines.map((ln,i)=>`<text class="ad" x="${n.x}" y="${n.y+30+i*11}">${ln}</text>`).join("")}</g>`;
+    const h=62+lines.length*13;
+    svg+=`<g class="node" id="n_${k}"><rect x="${n.x-w/2}" y="${n.y-36}" width="${w}" height="${h}" rx="10"/><text class="ic" x="${n.x}" y="${n.y}">${n.ic}</text><text class="nm" x="${n.x}" y="${n.y+16}">${n.name}</text>${lines.map((ln,i)=>`<text class="ad" x="${n.x}" y="${n.y+32+i*13}">${ln}</text>`).join("")}</g>`;
   }
   const s=t.nodes[src()];
   svg+=`<g id="token" style="transform:translate(${s.x}px,${s.y-52}px)"><text id="tokenIcon">✉️</text></g>`;
