@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>OSI / TCP-IP · Simulador de viaje de un mensaje</title>
+<style>
+  :root{--bg:#0f172a;--panel:#1e293b;--txt:#e2e8f0;--muted:#94a3b8;--acc:#38bdf8;--warn:#facc15}
+  *{box-sizing:border-box}
+  body{margin:0;padding:14px;font-family:Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--txt)}
+  h1{text-align:center;margin:0 0 4px;font-size:26px}
+  .sub{text-align:center;color:var(--muted);font-size:14px;margin-bottom:10px}
+  .top{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center;margin-bottom:10px}
+  input,select{padding:8px;border:none;border-radius:7px;font-size:15px}
+  #msg{min-width:260px}
+  button{padding:9px 14px;border:none;border-radius:8px;background:var(--acc);color:#0b1220;font-weight:700;font-size:15px;cursor:pointer}
+  button.sec{background:#475569;color:#fff}
+  button:disabled{opacity:.4;cursor:default}
+  .chip{padding:6px 10px;border-radius:16px;background:#23314a;font-size:14px}
+  .main{display:flex;gap:12px;flex-wrap:wrap}
+  #networkWrap{flex:1;min-width:620px}
+  #net{width:100%;background:#111c33;border-radius:12px;display:block}
+  #bar{height:6px;background:#23314a;border-radius:4px;margin-top:8px;overflow:hidden}
+  #barIn{height:100%;width:0;background:var(--acc);transition:width .3s}
+  #status{margin-top:8px;padding:8px 10px;background:#13213a;border-radius:8px;color:var(--muted);font-size:14px}
+  #right{width:400px;display:flex;flex-direction:column;gap:10px}
+  #layers,#stage{background:var(--panel);border-radius:10px;padding:10px}
+  #devnote{font-size:13px;color:var(--muted);margin-bottom:4px}
+  .layer{display:flex;justify-content:space-between;gap:6px;padding:7px 8px;margin:4px 0;border-radius:8px;border-left:8px solid #4b5563;background:#172338;opacity:.25;transition:.2s;font-size:14px}
+  .layer.av{opacity:.7}
+  .layer.act{opacity:1;transform:scale(1.03);background:#243652;box-shadow:0 0 0 2px var(--warn)}
+  .layer .pdu{color:var(--muted);font-size:12px;white-space:nowrap}
+  #phases{display:flex;gap:6px;margin-bottom:8px}
+  .ph{flex:1;text-align:center;padding:4px;border-radius:6px;background:#172338;font-size:12px;color:var(--muted)}
+  .ph.on{background:var(--acc);color:#0b1220;font-weight:700}
+  #badge{display:inline-block;padding:4px 9px;border-radius:999px;font-weight:800;font-size:13px;color:#0f172a;margin-bottom:6px}
+  #expl{min-height:90px;font-size:15px;line-height:1.35}
+  #why{font-size:13px;color:var(--muted);margin-top:4px}
+  #view{max-height:340px;overflow:auto}
+  .env{border:3px solid;border-radius:10px;padding:6px;margin-top:6px}
+  .hdr{font-family:monospace;font-size:12px;font-weight:700;margin-bottom:4px;word-break:break-all}
+  .core{background:#fef9c3;color:#1f2937;padding:6px;border-radius:7px;font-family:monospace;word-break:break-all}
+  .seg{display:inline-block;vertical-align:top;margin:3px}
+  .ghost{border:3px dashed #fb7185;border-radius:10px;padding:18px 12px;color:#fb7185;font-weight:700;text-align:center}
+  .bits{font-family:monospace;font-size:12px;color:#4ade80;word-break:break-all}
+  canvas{width:100%;height:85px;background:#020617;border-radius:8px;margin-top:6px}
+  .zone{fill:#16233f;stroke:#2b3d63;stroke-dasharray:6 6}
+  .zlabel{fill:#64748b;font-size:13px;font-weight:700}
+  .edge{stroke:#475569;stroke-width:4}
+  .edge.route{stroke:#64748b}
+  .edge.on{stroke:#facc15;stroke-width:6}
+  .edge.flood{stroke:#fb7185;stroke-width:6;stroke-dasharray:8 6}
+  .node rect{fill:#1e293b;stroke:#334155;stroke-width:2}
+  .node text{fill:#e2e8f0;text-anchor:middle}
+  .node .ic{font-size:30px}
+  .node .nm{font-size:12px;font-weight:700}
+  .node .ad{font-size:10px;font-family:monospace;fill:#94a3b8}
+  .node.act rect{stroke:#facc15;stroke-width:4}
+  .node.dim{opacity:.55}
+  #token{transition:transform .9s ease-in-out}
+  #token text{font-size:34px;text-anchor:middle}
+  .hint{text-align:center;color:var(--muted);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<h1>✉️ ¿Cómo viaja tu mensaje por la red?</h1>
+<div class="sub">Escribe un mensaje, elige destino y pulsa ▶ para verlo encapsulado (OSI 7→1), viajando y desencapsulado (1→7)</div>
+
+<div class="top">
+  <input id="msg" value="Hola clase!" maxlength="30" aria-label="Mensaje" />
+  <label class="chip">Topología: <select id="topo"></select></label>
+  <label class="chip">Destino: <select id="dst"></select></label>
+  <label class="chip">Modelo:
+    <select id="model">
+      <option value="OSI">OSI (7 capas)</option>
+      <option value="TCPIP">TCP/IP (4 capas)</option>
+    </select>
+  </label>
+</div>
+<div class="top">
+  <button id="prev" class="sec">◀ Anterior</button>
+  <button id="next">Siguiente ▶</button>
+  <button id="play">⚡ Reproducir</button>
+  <button id="reset" class="sec">⟲ Reiniciar</button>
+  <label class="chip">Velocidad: <select id="speed">
+    <option value="3200">Lenta</option><option value="2000" selected>Normal</option><option value="1000">Rápida</option>
+  </select></label>
+  <label class="chip"><input type="checkbox" id="flood" /> Switch sin MAC conocida (flood)</label>
+  <label class="chip">Perder segmento: <select id="lossSeg"><option value="0">No</option></select></label>
+</div>
+
+<div class="main">
+  <div id="networkWrap">
+    <svg id="net" viewBox="0 0 1120 470"></svg>
+    <div id="bar"><div id="barIn"></div></div>
+    <div id="status">Listo.</div>
+  </div>
+  <div id="right">
+    <div id="layers"></div>
+    <div id="stage">
+      <div id="phases">
+        <div class="ph" data-ph="enc">1 · Encapsulación</div>
+        <div class="ph" data-ph="transit">2 · Tránsito</div>
+        <div class="ph" data-ph="dec">3 · Desencapsulación</div>
+      </div>
+      <span id="badge"></span>
+      <div id="expl"></div>
+      <div id="why"></div>
+      <div id="view"></div>
+    </div>
+  </div>
+</div>
+<div class="hint">Atajos: ← anterior · → siguiente · Espacio reproducir/pausar</div>
+
+<script>
+const $=id=>document.getElementById(id);
+
+const OSI=[
+  {n:7,name:"Aplicación",c:"#f87171",pdu:"Datos"},
+  {n:6,name:"Presentación",c:"#fb923c",pdu:"Datos"},
+  {n:5,name:"Sesión",c:"#facc15",pdu:"Datos"},
+  {n:4,name:"Transporte",c:"#4ade80",pdu:"Segmento"},
+  {n:3,name:"Red",c:"#38bdf8",pdu:"Paquete"},
+  {n:2,name:"Enlace",c:"#a78bfa",pdu:"Trama"},
+  {n:1,name:"Física",c:"#f472b6",pdu:"Bits"}
+];
+const TCPIP=[
+  {n:4,name:"Aplicación",osi:"OSI 7-5",c:"#f97316"},
+  {n:3,name:"Transporte",osi:"OSI 4",c:"#22c55e"},
+  {n:2,name:"Internet",osi:"OSI 3",c:"#38bdf8"},
+  {n:1,name:"Acceso a red",osi:"OSI 2-1",c:"#a78bfa"}
+];
+const colOSI=n=>OSI.find(x=>x.n===n).c;
+const nameOSI=n=>OSI.find(x=>x.n===n).name;
+const mapTcp=o=>o>=5?4:o===4?3:o===3?2:1;
+
+const SPORT=49152, DPORT=80, CHUNK=4;
+
+const TOPOLOGIES={
+  LAN:{
+    name:"1) Solo red local (LAN)", source:"A",
+    zones:[{x:10,y:40,w:1100,h:400,label:"Red local 192.168.1.0/24"}],
+    nodes:{
+      A:{x:120,y:130,ic:"💻",name:"PC-Origen",ip:"192.168.1.10",mac:"AA:AA:AA:00:00:10",layers:7,type:"host"},
+      M:{x:120,y:340,ic:"💻",name:"PC-Marta", ip:"192.168.1.20",mac:"AA:AA:AA:00:00:20",layers:7,type:"host"},
+      L:{x:920,y:130,ic:"🖥️",name:"PC-Luis",  ip:"192.168.1.30",mac:"AA:AA:AA:00:00:30",layers:7,type:"host"},
+      S:{x:520,y:240,ic:"🔀",name:"Switch", layers:2,type:"switch"}
+    },
+    edges:[["A","S"],["M","S"],["L","S"]],
+    destinations:["M","L"],
+    routes:{M:["A","S","M"], L:["A","S","L"]}
+  },
+  DUAL:{
+    name:"2) Dos redes con router", source:"A",
+    zones:[{x:10,y:40,w:470,h:400,label:"Red 1 · 192.168.1.0/24"},{x:480,y:40,w:630,h:400,label:"Red 2 · 192.168.2.0/24"}],
+    nodes:{
+      A:{x:90,y:130,ic:"💻",name:"PC-Origen",ip:"192.168.1.10",mac:"AA:AA:AA:00:00:0A",layers:7,type:"host"},
+      M:{x:90,y:340,ic:"💻",name:"PC-Marta", ip:"192.168.1.20",mac:"AA:AA:AA:00:00:0B",layers:7,type:"host"},
+      S1:{x:280,y:235,ic:"🔀",name:"Switch 1",layers:2,type:"switch"},
+      R1:{x:480,y:235,ic:"📡",name:"Router 1",layers:3,type:"router",
+          ifs:[{ip:"192.168.1.1",mac:"BA:BA:BA:00:00:01"},{ip:"192.168.2.1",mac:"BA:BA:BA:00:00:02"}]},
+      S2:{x:690,y:235,ic:"🔀",name:"Switch 2",layers:2,type:"switch"},
+      L:{x:900,y:130,ic:"🖥️",name:"PC-Luis",ip:"192.168.2.10",mac:"CC:CC:CC:00:00:0A",layers:7,type:"host"},
+      V:{x:900,y:340,ic:"🗄️",name:"Servidor",ip:"192.168.2.100",mac:"CC:CC:CC:00:00:64",layers:7,type:"host"}
+    },
+    edges:[["A","S1"],["M","S1"],["S1","R1"],["R1","S2"],["S2","L"],["S2","V"]],
+    destinations:["M","L","V"],
+    routes:{M:["A","S1","M"],L:["A","S1","R1","S2","L"],V:["A","S1","R1","S2","V"]}
+  },
+  INTERNET:{
+    name:"3) Tres redes (casa + ISP + internet)", source:"A",
+    note:"Simplificación: 10.0.1.10 y 172.16.1.20 son IP privadas; en la realidad Router Casa haría NAT y las IP cambiarían al salir a internet.",
+    zones:[
+      {x:10,y:40,w:380,h:400,label:"Casa · 10.0.1.0/24"},
+      {x:390,y:40,w:340,h:400,label:"ISP · 100.64.0.0/24"},
+      {x:730,y:40,w:380,h:200,label:"Vecino · 172.16.1.0/24"},
+      {x:730,y:240,w:380,h:200,label:"Web · 192.0.2.0/24"}
+    ],
+    nodes:{
+      A:{x:80,y:130,ic:"💻",name:"PC-Origen",ip:"10.0.1.10",mac:"AA:01:00:00:00:10",layers:7,type:"host"},
+      S1:{x:235,y:230,ic:"🔀",name:"Switch Casa",layers:2,type:"switch"},
+      R1:{x:390,y:230,ic:"📡",name:"Router Casa",layers:3,type:"router",
+          ifs:[{ip:"10.0.1.1",mac:"BA:01:00:00:00:01"},{ip:"100.64.0.1",mac:"BA:01:00:00:00:02"}]},
+      R2:{x:560,y:230,ic:"🌐",name:"Router ISP",layers:3,type:"router",
+          ifs:[{ip:"100.64.0.2",mac:"DA:00:00:00:00:01"},{ip:"203.0.113.1",mac:"DA:00:00:00:00:02"},{ip:"198.51.100.1",mac:"DA:00:00:00:00:03"}]},
+      R3:{x:730,y:135,ic:"📡",name:"Router Vecino",layers:3,type:"router",
+          ifs:[{ip:"203.0.113.2",mac:"EE:00:00:00:00:01"},{ip:"172.16.1.1",mac:"EE:00:00:00:00:02"}]},
+      SV:{x:950,y:135,ic:"🖥️",name:"PC-Vecino",ip:"172.16.1.20",mac:"EE:00:00:00:00:20",layers:7,type:"host"},
+      R4:{x:730,y:335,ic:"📡",name:"Router Web",layers:3,type:"router",
+          ifs:[{ip:"198.51.100.2",mac:"FE:00:00:00:00:01"},{ip:"192.0.2.1",mac:"FE:00:00:00:00:02"}]},
+      WEB:{x:950,y:335,ic:"🗄️",name:"Servidor Web",ip:"192.0.2.100",mac:"FE:00:00:00:00:64",layers:7,type:"host"}
+    },
+    edges:[["A","S1"],["S1","R1"],["R1","R2"],["R2","R3"],["R3","SV"],["R2","R4"],["R4","WEB"]],
+    destinations:["SV","WEB"],
+    routes:{SV:["A","S1","R1","R2","R3","SV"],WEB:["A","S1","R1","R2","R4","WEB"]}
+  }
+};
+
+const state={topoKey:"DUAL",dst:"L",model:"OSI",steps:[],i:0,timer:null,sid:1234,lossSeg:0,flood:false};
+
+/* ---------- utilidades ---------- */
+const enc=s=>[...new TextEncoder().encode(s)];
+const hexBytes=s=>enc(s).map(b=>b.toString(16).padStart(2,"0"));
+const bin=s=>enc(s).map(b=>b.toString(2).padStart(8,"0")).join("");
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const getMsg=()=>$("msg").value||"(vacío)";
+const chunksOf=()=>{const h=hexBytes(getMsg()),o=[];for(let i=0;i<h.length;i+=CHUNK)o.push(h.slice(i,i+CHUNK).join(" "));return o;};
+function crc32(str){
+  let crc=-1;
+  for(const b of enc(str)){crc^=b;for(let k=0;k<8;k++)crc=(crc>>>1)^(0xEDB88320&-(crc&1));}
+  return ((crc^-1)>>>0).toString(16).toUpperCase().padStart(8,"0");
+}
+const getTopo=()=>TOPOLOGIES[state.topoKey];
+const route=()=>getTopo().routes[state.dst];
+const src=()=>getTopo().source;
+const edgeId=(a,b)=>`e_${a}_${b}`;
+const pre=ip=>ip.split(".").slice(0,3).join(".");
+
+/* MAC de la interfaz de `dev` que mira hacia `other` (los routers tienen una MAC por interfaz) */
+function macFacing(dev,other){
+  if(dev.type!=="router") return dev.mac;
+  const oi=other.ifs?other.ifs.map(i=>i.ip):[other.ip];
+  const f=dev.ifs.find(i=>oi.some(o=>pre(o)===pre(i.ip)));
+  return (f||dev.ifs[0]).mac;
+}
+/* MACs de la trama en el enlace e (entre p[e] y p[e+1]); los switches no cambian la trama */
+function frameMacs(p,e){
+  const t=getTopo();
+  let a=e,b=e+1;
+  while(a>0&&t.nodes[p[a]].type==="switch")a--;
+  while(b<p.length-1&&t.nodes[p[b]].type==="switch")b++;
+  const A=t.nodes[p[a]],B=t.nodes[p[b]];
+  return [macFacing(A,B),macFacing(B,A)];
+}
+
+/* ---------- red SVG ---------- */
+function nodeWidth(n){return n.type==="switch"?110:n.type==="router"?156:150;}
+function drawNetwork(){
+  const t=getTopo(); let svg="";
+  (t.zones||[]).forEach(z=>{svg+=`<rect class="zone" x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="14"/><text class="zlabel" x="${z.x+12}" y="${z.y+20}">${z.label}</text>`;});
+  t.edges.forEach(([a,b])=>{const A=t.nodes[a],B=t.nodes[b];svg+=`<line class="edge" id="${edgeId(a,b)}" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`;});
+  for(const k in t.nodes){
+    const n=t.nodes[k], lines=[], w=nodeWidth(n);
+    if(n.type==="router") n.ifs.forEach((it,i)=>{lines.push(`eth${i}: ${it.ip}`);lines.push(it.mac)});
+    else if(n.ip){lines.push(n.ip);lines.push(n.mac)}
+    else lines.push("(capa 2: solo MAC)");
+    const h=50+lines.length*11;
+    svg+=`<g class="node" id="n_${k}"><rect x="${n.x-w/2}" y="${n.y-36}" width="${w}" height="${h}" rx="10"/><text class="ic" x="${n.x}" y="${n.y}">${n.ic}</text><text class="nm" x="${n.x}" y="${n.y+16}">${n.name}</text>${lines.map((ln,i)=>`<text class="ad" x="${n.x}" y="${n.y+30+i*11}">${ln}</text>`).join("")}</g>`;
+  }
+  const s=t.nodes[src()];
+  svg+=`<g id="token" style="transform:translate(${s.x}px,${s.y-52}px)"><text id="tokenIcon">✉️</text></g>`;
+  $("net").innerHTML=svg;
+}
+
+/* ---------- PDU ---------- */
+function wrapOSI(n,h,inner){return `<div class="env" style="border-color:${colOSI(n)}"><div class="hdr" style="color:${colOSI(n)}">${h}</div>${inner}</div>`;}
+const core=c=>`<div class="core">${c}</div>`;
+
+function segmentsHTML(s){
+  const ch=chunksOf(), N=ch.length, out=[];
+  ch.forEach((c,idx)=>{
+    const n=idx+1;
+    if(s.only&&s.only!==n) return;
+    if(s.lost===n){out.push(`<span class="seg ghost">❌ Segmento ${n}/${N}<br>no ha llegado</span>`);return;}
+    let inner=wrapOSI(5,`SESIÓN ${state.sid}`,core(c));
+    inner=wrapOSI(4,`TCP Seg ${n}/${N} · ${SPORT}→${DPORT} · SEQ ${1000+idx*CHUNK}`,inner);
+    if(s.pdu<=3) inner=wrapOSI(3,`IP ${s.ip[0]} → ${s.ip[1]} · TTL ${s.ttl}`,inner);
+    if(s.pdu<=2) inner=wrapOSI(2,`MAC ${s.mac[0]} → ${s.mac[1]} · CRC ${crc32(s.mac.join("")+s.ip.join("")+c)}`,inner);
+    out.push(`<span class="seg">${inner}</span>`);
+  });
+  return `<div>${out.join("")}</div>`;
+}
+function buildPDU(s){
+  const msg=getMsg(), hx=hexBytes(msg).join(" ");
+  if(s.pdu===7) return core(esc(msg));
+  if(s.pdu===6) return wrapOSI(6,"PRESENTACIÓN: texto → hexadecimal",core(hx));
+  if(s.pdu===5) return wrapOSI(5,`SESIÓN ${state.sid}`,core(hx));
+  if(s.pdu>=2) return segmentsHTML(s);
+  return `<div class="bits">${bin(msg).replace(/(.{8})/g,"$1 ")}</div><canvas id="sig" width="640" height="85"></canvas>`;
+}
+function renderPDU(s){$("view").innerHTML=buildPDU(s);drawSignal();}
+function drawSignal(){
+  const c=$("sig");if(!c)return;
+  const ctx=c.getContext("2d"),b=bin(getMsg()).slice(0,56),w=c.width/Math.max(1,b.length);
+  ctx.clearRect(0,0,c.width,c.height);ctx.beginPath();ctx.strokeStyle="#4ade80";ctx.lineWidth=2;
+  [...b].forEach((bit,i)=>{const y=bit==="1"?18:68;if(i===0)ctx.moveTo(0,y);else ctx.lineTo(i*w,y);ctx.lineTo((i+1)*w,y)});
+  ctx.stroke();
+}
+
+/* ---------- capas ---------- */
+function renderLayers(s){
+  const n=getTopo().nodes[s.node],max=n.layers||1;
+  const kind=n.type==="host"?"Host: procesa hasta la capa 7":n.type==="router"?"Router: procesa hasta la capa 3":"Switch: procesa solo la capa 2 (y 1)";
+  let html=`<div id="devnote">${n.ic} <b>${n.name}</b> · ${kind}</div>`;
+  if(state.model==="OSI"){
+    html+=OSI.map(l=>`<div class="layer ${l.n<=max?'av':''} ${l.n===s.osi?'act':''}" style="border-color:${l.c}"><span><b>${l.n}</b> · ${l.name}</span><span class="pdu">${l.pdu}</span></div>`).join("");
+  }else{
+    const act=mapTcp(s.osi),mx=mapTcp(max);
+    html+=TCPIP.map(l=>`<div class="layer ${l.n<=mx?'av':''} ${l.n===act?'act':''}" style="border-color:${l.c}"><span><b>${l.n}</b> · ${l.name}</span><span class="pdu">${l.osi}</span></div>`).join("");
+  }
+  $("layers").innerHTML=html;
+}
+
+/* ---------- timeline ---------- */
+function buildSteps(){
+  const t=getTopo(),p=route(),S=t.nodes[src()],D=t.nodes[state.dst];
+  const ip=[S.ip,D.ip],N=chunksOf().length;
+  const lost=(state.lossSeg>=1&&state.lossSeg<=N)?state.lossSeg:0;
+  const steps=[];
+  const add=o=>steps.push(Object.assign({ip,ttl:64,lost:0,only:0,why:""},o));
+  const last=p.length-1, msg=esc(getMsg());
+  const firstDev=p.slice(1).findIndex(k=>t.nodes[k].type!=="switch")+1;
+  const gw=t.nodes[p[firstDev]];
+  const sameNet=firstDev===last;
+
+  const encTxt={
+    7:["La aplicación entrega tu mensaje: «"+msg+"».","Aquí empieza todo: el dato original, tal como lo escribe el usuario."],
+    6:["Presentación codifica el texto como bytes (UTF-8); aquí los mostramos en hexadecimal.","Los dos extremos deben usar la misma codificación (también cifrado/compresión, p. ej. TLS). El hex es solo una forma de verlos."],
+    5:[`Sesión abre la conversación con ID ${state.sid}.`,"Controla el diálogo: quién habla, cuándo y cómo se cierra."],
+    4:[`Transporte (TCP) trocea los datos en ${N} segmento(s) de ${CHUNK} bytes, puertos ${SPORT}→${DPORT}.`,"Cada segmento lleva número de secuencia para poder reordenar y detectar pérdidas."],
+    3:[`Red añade IP origen ${ip[0]} e IP destino ${ip[1]}.`,"Las IP identifican a los extremos y no cambian en el viaje (salvo que haya NAT)."],
+    2:[sameNet?`Enlace añade MAC origen y MAC destino (${D.name} está en tu misma red) + CRC.`:`Enlace añade tu MAC y la MAC del router ${gw.name} (puerta de enlace), no la del destino final + CRC.`,"La MAC del vecino se averigua antes con ARP. Solo vale para UN salto: se reescribe en cada router."],
+    1:["Física convierte la trama en bits / señal eléctrica y la envía.","Solo son unos y ceros (señal simplificada tipo NRZ; Ethernet real usa otras codificaciones). Se muestran solo los bits del mensaje, no de toda la trama."]
+  };
+  for(let l=7;l>=1;l--) add({k:"enc",phase:"enc",node:p[0],pi:0,osi:l,pdu:l,mac:frameMacs(p,0),txt:encTxt[l][0],why:encTxt[l][1]});
+
+  let routers=0,floodUsed=false;
+  for(let i=1;i<=last;i++){
+    const key=p[i],n=t.nodes[key],mac=frameMacs(p,i-1);
+    if(n.type==="switch"){
+      if(state.flood&&!floodUsed){
+        floodUsed=true;
+        const others=t.edges.filter(([a,b])=>a===key||b===key).map(([a,b])=>a===key?b:a).filter(o=>o!==p[i-1]).map(o=>t.nodes[o].name);
+        add({k:"flood",phase:"transit",node:key,pi:i,osi:2,pdu:2,mac,ttl:64-routers,
+          txt:`⚠ ${n.name} NO conoce la MAC destino: hace FLOOD por todos los puertos menos el de entrada (${others.join(", ")}).`,
+          why:"Los demás equipos descartan la trama porque la MAC destino no es la suya."});
+      }
+      add({k:"sw",phase:"transit",node:key,pi:i,osi:2,pdu:2,mac,ttl:64-routers,
+        txt:`${n.name} lee la MAC destino, aprende la MAC origen y reenvía la trama por el puerto correcto.`,
+        why:"El switch trabaja en capa 2: no mira IP, solo MAC."});
+    }else if(n.type==="router"){
+      const next=t.nodes[p[i+1]];
+      add({k:"rin",phase:"transit",node:key,pi:i,osi:2,pdu:2,mac,ttl:64-routers,
+        txt:`${n.name} recibe la trama: la MAC destino es suya, comprueba el CRC y quita la cabecera de enlace.`,
+        why:"La trama termina en el router; subirá a capa 3."});
+      routers++;
+      add({k:"r3",phase:"transit",node:key,pi:i,osi:3,pdu:3,mac,ttl:64-routers,
+        txt:`${n.name} mira la IP destino ${ip[1]}, consulta su tabla de rutas y decide el siguiente salto (${next.name}). TTL baja a ${64-routers}.`,
+        why:"El router llega solo hasta capa 3; la IP origen y destino no se tocan."});
+      add({k:"r2",phase:"transit",node:key,pi:i,osi:2,pdu:2,mac:frameMacs(p,i),ttl:64-routers,
+        txt:`${n.name} crea una trama NUEVA con su MAC de salida y la MAC del siguiente salto, y recalcula el CRC.`,
+        why:"Por eso las MAC cambian en cada salto pero las IP no."});
+    }else{
+      const tt=64-routers;
+      add({k:"arr",phase:"dec",node:key,pi:i,osi:1,pdu:1,mac,ttl:tt,txt:`${n.name} recibe la señal y la convierte en bits.`,why:"Empieza la desencapsulación: de capa 1 hacia arriba."});
+      add({k:"dec",phase:"dec",node:key,pi:i,osi:2,pdu:2,mac,ttl:tt,lost,txt:`Enlace: la MAC destino es la mía y el CRC es correcto → quita la cabecera de trama.`,why:"Si el CRC falla, la trama se descarta."});
+      add({k:"dec",phase:"dec",node:key,pi:i,osi:3,pdu:3,mac,ttl:tt,lost,txt:`Red: la IP destino ${ip[1]} es la mía → quita la cabecera IP.`,why:"Si la IP no fuera mía, no subiría más."});
+      if(lost){
+        add({k:"loss",phase:"dec",node:key,pi:i,osi:4,pdu:4,mac,ttl:tt,lost,
+          txt:`🔍 TCP detecta un hueco: falta el segmento ${lost}/${N}. No envía ACK de él.`,
+          why:"El emisor no recibe ACK de ese segmento; tras el timeout (RTO) o varios ACK duplicados lo retransmite."});
+        add({k:"retx",phase:"transit",node:p[0],pi:0,osi:4,pdu:2,mac:frameMacs(p,0),only:lost,
+          txt:`🔁 ${S.name} retransmite el segmento ${lost} (timeout sin ACK).`,
+          why:"TCP es fiable: garantiza la entrega reenviando lo perdido."});
+        for(let j=1;j<last;j++){
+          const m=t.nodes[p[j]];
+          add({k:"retxhop",phase:"transit",node:p[j],pi:j,osi:m.type==="router"?3:2,pdu:m.type==="router"?3:2,mac:frameMacs(p,j-1),only:lost,
+            ttl:64-p.slice(1,j+1).filter(x=>t.nodes[x].type==="router").length,
+            txt:`${m.name} reenvía el segmento ${lost} retransmitido.`,why:"Mismo camino, mismo proceso."});
+        }
+        add({k:"retxarr",phase:"dec",node:key,pi:i,osi:4,pdu:4,mac,ttl:tt,
+          txt:`✅ Llega el segmento ${lost}. TCP reordena los ${N} segmentos y envía ACK.`,why:"Ahora los datos están completos."});
+      }else{
+        add({k:"dec",phase:"dec",node:key,pi:i,osi:4,pdu:4,mac,ttl:tt,txt:`Transporte: junta los ${N} segmento(s) por SEQ y entrega al puerto ${DPORT}.`,why:"TCP reensambla y reordena."});
+      }
+      add({k:"dec",phase:"dec",node:key,pi:i,osi:5,pdu:5,mac,ttl:tt,txt:`Sesión ${state.sid}: la conversación continúa.`,why:"Se identifica a qué diálogo pertenecen los datos. En TCP/IP esta función la hace la propia aplicación."});
+      add({k:"dec",phase:"dec",node:key,pi:i,osi:6,pdu:6,mac,ttl:tt,txt:"Presentación: decodifica los bytes (UTF-8) a texto.",why:"Misma codificación en ambos extremos."});
+      add({k:"dec",phase:"dec",node:key,pi:i,osi:7,pdu:7,mac,ttl:tt,txt:`🎉 Aplicación de ${n.name} muestra: «${msg}»`,why:"¡Mensaje entregado!"});
+    }
+  }
+  state.steps=steps; state.i=0;
+}
+
+/* ---------- render ---------- */
+function highlight(s){
+  document.querySelectorAll('.edge').forEach(e=>e.classList.remove('on','flood','route'));
+  const p=route(),t=getTopo();
+  const get=(a,b)=>$(edgeId(a,b))||$(edgeId(b,a));
+  for(let i=1;i<p.length;i++){const e=get(p[i-1],p[i]);if(e)e.classList.add(i<=s.pi?'on':'route');}
+  if(s.k==='flood'){
+    const sw=s.node,inN=p[s.pi-1];
+    t.edges.forEach(([a,b])=>{if(a===sw||b===sw){const o=a===sw?b:a;if(o!==inN){const e=get(a,b);if(e)e.classList.remove('route','on'),e.classList.add('flood');}}});
+  }
+}
+const TOKENS={7:'✉️',6:'🔤',5:'🏷️',4:'📄',3:'📦',2:'🚚',1:'⚡'};
+function renderStep(){
+  const s=state.steps[state.i],t=getTopo(),np=t.nodes[s.node];
+  document.querySelectorAll('.node').forEach(n=>n.classList.remove('act'));
+  const gn=$("n_"+s.node); if(gn)gn.classList.add('act');
+  highlight(s);
+  $("tokenIcon").textContent=TOKENS[s.pdu];
+  $("token").style.transform=`translate(${np.x}px,${np.y-52}px)`;
+  const b=s.k==='enc'?["⬇ ENCAPSULANDO","#fb923c"]:s.k==='flood'?["⚠ FLOOD","#fb7185"]:s.k==='loss'?["❌ PÉRDIDA DETECTADA","#fb7185"]:(s.k==='retx'||s.k==='retxhop'||s.k==='retxarr')?["🔁 RETRANSMISIÓN","#f87171"]:s.phase==='dec'?["⬆ DESENCAPSULANDO","#4ade80"]:["➡ REENVIANDO","#38bdf8"];
+  $("badge").textContent=b[0]; $("badge").style.background=b[1];
+  document.querySelectorAll('.ph').forEach(e=>e.classList.toggle('on',e.dataset.ph===s.phase));
+  renderLayers(s);
+  const lay=state.model==="OSI"?`OSI ${s.osi} (${nameOSI(s.osi)})`:`TCP/IP ${mapTcp(s.osi)} · ${TCPIP.find(x=>x.n===mapTcp(s.osi)).name}`;
+  $("expl").innerHTML=`<b style="color:${colOSI(s.osi)}">${np.name} · ${lay}</b><br>${s.txt}`;
+  $("why").textContent=s.why?"💡 "+s.why:"";
+  renderPDU(s);
+  $("status").innerHTML=`Paso <b>${state.i+1}</b>/<b>${state.steps.length}</b> · ${t.name} · Destino <b>${t.nodes[state.dst].name}</b>${t.note?`<br><span style="color:#facc15">ℹ ${t.note}</span>`:""}<br>Simplificado: segmentos de ${CHUNK} bytes (real: ~1460), SEQ inicial 1000 (real: aleatorio), CRC-32 calculado sobre datos de ejemplo.`;
+  $("barIn").style.width=((state.i+1)/state.steps.length*100)+"%";
+  $("prev").disabled=state.i===0; $("next").disabled=state.i===state.steps.length-1;
+}
+
+function updateLossOptions(){
+  const N=chunksOf().length,old=Number($("lossSeg").value||0);
+  let o='<option value="0">No</option>';
+  for(let i=1;i<=N;i++) o+=`<option value="${i}">Segmento ${i}</option>`;
+  $("lossSeg").innerHTML=o;
+  const v=old>=1&&old<=N?old:0;
+  $("lossSeg").value=String(v); state.lossSeg=v;
+}
+function stop(){clearInterval(state.timer);state.timer=null;$("play").textContent='⚡ Reproducir';}
+function restart(){stop();updateLossOptions();buildSteps();renderStep();}
+function newSession(){state.sid=Math.floor(Math.random()*9000+1000);restart();}
+
+function fillTopos(){ $("topo").innerHTML=Object.entries(TOPOLOGIES).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join(''); $("topo").value=state.topoKey; }
+function fillDst(){
+  const t=getTopo();
+  $("dst").innerHTML=t.destinations.map(k=>`<option value="${k}">${t.nodes[k].name}</option>`).join('');
+  if(!t.destinations.includes(state.dst)) state.dst=t.destinations[0];
+  $("dst").value=state.dst;
+}
+function togglePlay(){
+  if(state.timer){stop();return;}
+  if(state.i===state.steps.length-1){state.i=0;renderStep();}
+  $("play").textContent='⏸ Pausa';
+  state.timer=setInterval(()=>{if(state.i<state.steps.length-1){state.i++;renderStep();}else stop();},Number($("speed").value));
+}
+
+$("topo").addEventListener('change',()=>{state.topoKey=$("topo").value;state.dst=getTopo().destinations[0];drawNetwork();fillDst();newSession();});
+$("dst").addEventListener('change',()=>{state.dst=$("dst").value;newSession();});
+$("model").addEventListener('change',()=>{state.model=$("model").value;stop();state.i=0;renderStep();});
+$("msg").addEventListener('input',restart);
+$("lossSeg").addEventListener('change',()=>{state.lossSeg=Number($("lossSeg").value||0);restart();});
+$("flood").addEventListener('change',()=>{state.flood=$("flood").checked;restart();});
+$("speed").addEventListener('change',()=>{if(state.timer){stop();togglePlay();}});
+$("next").addEventListener('click',()=>{if(state.i<state.steps.length-1){state.i++;renderStep();}});
+$("prev").addEventListener('click',()=>{if(state.i>0){state.i--;renderStep();}});
+$("reset").addEventListener('click',newSession);
+$("play").addEventListener('click',togglePlay);
+document.addEventListener('keydown',e=>{
+  if(["INPUT","SELECT"].includes(e.target.tagName)&&e.target.type!=="checkbox")return;
+  if(e.key==="ArrowRight")$("next").click();
+  else if(e.key==="ArrowLeft")$("prev").click();
+  else if(e.key===" "){e.preventDefault();togglePlay();}
+});
+
+fillTopos(); drawNetwork(); fillDst(); newSession();
+</script>
+</body>
+</html>
