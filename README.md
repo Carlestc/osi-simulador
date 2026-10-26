@@ -6,7 +6,7 @@ Es un único archivo, [`index.html`](./index.html), en HTML+CSS+JS puro. No nece
 
 ## Uso
 
-1. Escribe un mensaje (máx. 30 caracteres).
+1. Elige el **contenido**: un **texto** (máx. 30 caracteres) o una **imagen 8×8** (píxeles en blanco/negro; píxel a píxel con clic, o un ejemplo prediseñado). La imagen se codifica a 1 bit por píxel: cada fila = 1 byte, 8 bytes en total.
 2. Elige **topología** (LAN, dos redes con router, tres redes con ISP) y **destino**.
 3. Elige la vista **OSI (7 capas)** o **TCP/IP (4 capas)**.
 4. Avanza con **Siguiente / Anterior**, o pulsa **Reproducir** (velocidad ajustable).
@@ -19,8 +19,8 @@ Es un único archivo, [`index.html`](./index.html), en HTML+CSS+JS puro. No nece
 
 | Capa | PDU | Contenido |
 |------|-----|-----------|
-| 7 | Datos | Texto original |
-| 6 | Datos | Bytes en hexadecimal (UTF-8) |
+| 7 | Datos | Texto original o imagen 8×8 |
+| 6 | Datos | Bytes en hexadecimal (UTF-8 en texto; 1 bit/píxel en imagen) |
 | 5 | Datos | ID de sesión |
 | 4 | Segmento | Segmentos n/N, puertos, SEQ |
 | 3 | Paquete | IP origen/destino (extremo a extremo), TTL |

@@ -13,6 +13,12 @@
   .top{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center;margin-bottom:10px}
   input,select{padding:8px;border:none;border-radius:7px;font-size:15px}
   #msg{min-width:260px}
+  #imgBox{display:none;align-items:center;gap:10px}
+  #imgBox.on{display:flex}
+  #pix{display:grid;grid-template-columns:repeat(8,16px);gap:2px;background:#334155;padding:2px;border-radius:6px}
+  #pix button{width:16px;height:16px;padding:0;border-radius:2px;background:#f8fafc}
+  #pix button.on{background:#0f172a}
+  .pimg{display:inline-block;vertical-align:middle;border-radius:6px;background:#f8fafc;image-rendering:pixelated}
   button{padding:9px 14px;border:none;border-radius:8px;background:var(--acc);color:#0b1220;font-weight:700;font-size:15px;cursor:pointer}
   button.sec{background:#475569;color:#fff}
   button:disabled{opacity:.4;cursor:default}
@@ -67,7 +73,14 @@
 <div class="sub">Escribe un mensaje, elige destino y pulsa ▶ para verlo encapsulado (OSI 7→1), viajando y desencapsulado (1→7)</div>
 
 <div class="top">
+  <label class="chip">Contenido:
+    <select id="kind"><option value="text">✉️ Texto</option><option value="img">🖼️ Imagen 8×8</option></select>
+  </label>
   <input id="msg" value="Hola clase!" maxlength="30" aria-label="Mensaje" />
+  <div id="imgBox" class="chip">
+    <div id="pix" aria-label="Imagen 8x8: pulsa los píxeles para pintar"></div>
+    <label>Ejemplo: <select id="preset"></select></label>
+  </div>
   <label class="chip">Topología: <select id="topo"></select></label>
   <label class="chip">Destino: <select id="dst"></select></label>
   <label class="chip">Modelo:
@@ -200,11 +213,28 @@ const state={topoKey:"DUAL",dst:"L",model:"OSI",steps:[],i:0,timer:null,sid:1234
 
 /* ---------- utilidades ---------- */
 const enc=s=>[...new TextEncoder().encode(s)];
-const hexBytes=s=>enc(s).map(b=>b.toString(16).padStart(2,"0"));
-const bin=s=>enc(s).map(b=>b.toString(2).padStart(8,"0")).join("");
+const hexBytes=()=>getBytes().map(b=>b.toString(16).padStart(2,"0"));
+const bin=()=>getBytes().map(b=>b.toString(2).padStart(8,"0")).join("");
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const PRESETS={
+  smile:{name:"😀 Carita",rows:[0x3C,0x42,0xA5,0x81,0xA5,0x99,0x42,0x3C]},
+  heart:{name:"❤️ Corazón",rows:[0x00,0x66,0xFF,0xFF,0xFF,0x7E,0x3C,0x18]},
+  house:{name:"🏠 Casa",rows:[0x18,0x3C,0x7E,0xFF,0xFF,0x66,0x66,0x7E]},
+  arrow:{name:"➡️ Flecha",rows:[0x08,0x0C,0xFE,0xFF,0xFE,0x0C,0x08,0x00]},
+  blank:{name:"⬜ En blanco",rows:[0,0,0,0,0,0,0,0]}
+};
+state.kind="text"; state.img=PRESETS.smile.rows.slice();
+const getBytes=()=>state.kind==="img"?state.img.slice():enc($("msg").value||"(vacío)");
 const getMsg=()=>$("msg").value||"(vacío)";
-const chunksOf=()=>{const h=hexBytes(getMsg()),o=[];for(let i=0;i<h.length;i+=CHUNK)o.push(h.slice(i,i+CHUNK).join(" "));return o;};
+function imgSVG(rows,px,lostRows){
+  let r="";
+  rows.forEach((v,y)=>{
+    if(lostRows&&lostRows.has(y)) r+=`<rect x="0" y="${y*px}" width="${8*px}" height="${px}" fill="#fecaca"/>`;
+    else for(let x=0;x<8;x++) if(v&(0x80>>x)) r+=`<rect x="${x*px}" y="${y*px}" width="${px}" height="${px}" fill="#0f172a"/>`;
+  });
+  return `<svg class="pimg" width="${8*px}" height="${8*px}" viewBox="0 0 ${8*px} ${8*px}" role="img" aria-label="Imagen 8x8">${r}</svg>`;
+}
+const chunksOf=()=>{const h=hexBytes(),o=[];for(let i=0;i<h.length;i+=CHUNK)o.push(h.slice(i,i+CHUNK).join(" "));return o;};
 function crc32(str){
   let crc=-1;
   for(const b of enc(str)){crc^=b;for(let k=0;k<8;k++)crc=(crc>>>1)^(0xEDB88320&-(crc&1));}
@@ -271,17 +301,18 @@ function segmentsHTML(s){
   return `<div>${out.join("")}</div>`;
 }
 function buildPDU(s){
-  const msg=getMsg(), hx=hexBytes(msg).join(" ");
-  if(s.pdu===7) return core(esc(msg));
-  if(s.pdu===6) return wrapOSI(6,"PRESENTACIÓN: texto → hexadecimal",core(hx));
+  const isImg=state.kind==="img",msg=getMsg(),hx=hexBytes().join(" ");
+  if(s.pdu===7) return isImg?`<div class="core" style="text-align:center">${imgSVG(state.img,16)}</div>`:core(esc(msg));
+  if(s.pdu===6) return wrapOSI(6,isImg?"PRESENTACIÓN: imagen → bytes (1 bit por píxel, 1 fila = 1 byte)":"PRESENTACIÓN: texto → hexadecimal",
+    core(isImg?`${imgSVG(state.img,10)}<br>${hx}`:hx));
   if(s.pdu===5) return wrapOSI(5,`SESIÓN ${state.sid}`,core(hx));
   if(s.pdu>=2) return segmentsHTML(s);
-  return `<div class="bits">${bin(msg).replace(/(.{8})/g,"$1 ")}</div><canvas id="sig" width="640" height="85"></canvas>`;
+  return `<div class="bits">${bin().replace(/(.{8})/g,"$1 ")}</div><canvas id="sig" width="640" height="85"></canvas>`;
 }
 function renderPDU(s){$("view").innerHTML=buildPDU(s);drawSignal();}
 function drawSignal(){
   const c=$("sig");if(!c)return;
-  const ctx=c.getContext("2d"),b=bin(getMsg()).slice(0,56),w=c.width/Math.max(1,b.length);
+  const ctx=c.getContext("2d"),b=bin().slice(0,56),w=c.width/Math.max(1,b.length);
   ctx.clearRect(0,0,c.width,c.height);ctx.beginPath();ctx.strokeStyle="#4ade80";ctx.lineWidth=2;
   [...b].forEach((bit,i)=>{const y=bit==="1"?18:68;if(i===0)ctx.moveTo(0,y);else ctx.lineTo(i*w,y);ctx.lineTo((i+1)*w,y)});
   ctx.stroke();
@@ -308,14 +339,14 @@ function buildSteps(){
   const lost=(state.lossSeg>=1&&state.lossSeg<=N)?state.lossSeg:0;
   const steps=[];
   const add=o=>steps.push(Object.assign({ip,ttl:64,lost:0,only:0,why:""},o));
-  const last=p.length-1, msg=esc(getMsg());
+  const last=p.length-1, isImg=state.kind==="img", msg=isImg?"la imagen":"«"+esc(getMsg())+"»";
   const firstDev=p.slice(1).findIndex(k=>t.nodes[k].type!=="switch")+1;
   const gw=t.nodes[p[firstDev]];
   const sameNet=firstDev===last;
 
   const encTxt={
-    7:["La aplicación entrega tu mensaje: «"+msg+"».","Aquí empieza todo: el dato original, tal como lo escribe el usuario."],
-    6:["Presentación codifica el texto como bytes (UTF-8); aquí los mostramos en hexadecimal.","Los dos extremos deben usar la misma codificación (también cifrado/compresión, p. ej. TLS). El hex es solo una forma de verlos."],
+    7:[isImg?"La aplicación entrega la imagen 8×8 (64 píxeles, blanco o negro).":"La aplicación entrega tu mensaje: «"+esc(getMsg())+"».","Aquí empieza todo: el dato original, tal como lo crea el usuario."],
+    6:[isImg?"Presentación codifica la imagen como bytes: 1 bit por píxel, cada fila de 8 píxeles = 1 byte (8 bytes en total).":"Presentación codifica el texto como bytes (UTF-8); aquí los mostramos en hexadecimal.","Los dos extremos deben usar la misma codificación (también cifrado/compresión, p. ej. TLS). El hex es solo una forma de verlos."],
     5:[`Sesión abre la conversación con ID ${state.sid}.`,"Controla el diálogo: quién habla, cuándo y cómo se cierra."],
     4:[`Transporte (TCP) trocea los datos en ${N} segmento(s) de ${CHUNK} bytes, puertos ${SPORT}→${DPORT}.`,"Cada segmento lleva número de secuencia para poder reordenar y detectar pérdidas."],
     3:[`Red añade IP origen ${ip[0]} e IP destino ${ip[1]}.`,"Las IP identifican a los extremos y no cambian en el viaje (salvo que haya NAT)."],
@@ -375,7 +406,7 @@ function buildSteps(){
       }
       add({k:"dec",phase:"dec",node:key,pi:i,osi:5,pdu:5,mac,ttl:tt,txt:`Sesión ${state.sid}: la conversación continúa.`,why:"Se identifica a qué diálogo pertenecen los datos. En TCP/IP esta función la hace la propia aplicación."});
       add({k:"dec",phase:"dec",node:key,pi:i,osi:6,pdu:6,mac,ttl:tt,txt:"Presentación: decodifica los bytes (UTF-8) a texto.",why:"Misma codificación en ambos extremos."});
-      add({k:"dec",phase:"dec",node:key,pi:i,osi:7,pdu:7,mac,ttl:tt,txt:`🎉 Aplicación de ${n.name} muestra: «${msg}»`,why:"¡Mensaje entregado!"});
+      add({k:"dec",phase:"dec",node:key,pi:i,osi:7,pdu:7,mac,ttl:tt,txt:`🎉 Aplicación de ${n.name} muestra ${msg}`,why:"¡Mensaje entregado!"});
     }
   }
   state.steps=steps; state.i=0;
@@ -443,6 +474,23 @@ $("topo").addEventListener('change',()=>{state.topoKey=$("topo").value;state.dst
 $("dst").addEventListener('change',()=>{state.dst=$("dst").value;newSession();});
 $("model").addEventListener('change',()=>{state.model=$("model").value;stop();state.i=0;renderStep();});
 $("msg").addEventListener('input',restart);
+function drawPix(){
+  $("pix").innerHTML=state.img.map((v,y)=>[...Array(8)].map((_,x)=>`<button type="button" class="${v&(0x80>>x)?'on':''}" data-x="${x}" data-y="${y}" aria-label="Píxel ${x+1},${y+1}"></button>`).join("")).join("");
+}
+function syncKind(){
+  const img=state.kind==="img";
+  $("msg").style.display=img?"none":"";
+  $("imgBox").classList.toggle("on",img);
+}
+$("preset").innerHTML=Object.entries(PRESETS).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join("");
+$("kind").addEventListener('change',()=>{state.kind=$("kind").value;syncKind();restart();});
+$("preset").addEventListener('change',()=>{state.img=PRESETS[$("preset").value].rows.slice();drawPix();restart();});
+$("pix").addEventListener('click',e=>{
+  const b=e.target.closest("button");if(!b)return;
+  state.img[+b.dataset.y]^=0x80>>+b.dataset.x;
+  b.classList.toggle("on");restart();
+});
+drawPix();
 $("lossSeg").addEventListener('change',()=>{state.lossSeg=Number($("lossSeg").value||0);restart();});
 $("flood").addEventListener('change',()=>{state.flood=$("flood").checked;restart();});
 $("speed").addEventListener('change',()=>{if(state.timer){stop();togglePlay();}});
@@ -451,6 +499,7 @@ $("prev").addEventListener('click',()=>{if(state.i>0){state.i--;renderStep();}})
 $("reset").addEventListener('click',newSession);
 $("play").addEventListener('click',togglePlay);
 document.addEventListener('keydown',e=>{
+  if(e.target.closest&&e.target.closest("#pix"))return;
   if(["INPUT","SELECT"].includes(e.target.tagName)&&e.target.type!=="checkbox")return;
   if(e.key==="ArrowRight")$("next").click();
   else if(e.key==="ArrowLeft")$("prev").click();

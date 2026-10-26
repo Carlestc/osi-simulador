@@ -60,6 +60,25 @@ test('loss only offers existing segments and triggers retransmission', async ({ 
   expect(errors).toEqual([]);
 });
 
+test('image mode: 8 bytes, editable pixels, delivered image with loss', async ({ page }) => {
+  const errors = await open(page);
+  await page.locator('#kind').selectOption('img');
+  await expect(page.locator('#msg')).toBeHidden();
+  await expect(page.locator('#pix button')).toHaveCount(64);
+  expect(await page.evaluate(() => hexBytes().join(' '))).toBe('3c 42 a5 81 a5 99 42 3c');
+  await page.locator('#pix button[data-x="0"][data-y="0"]').click();
+  expect(await page.evaluate(() => hexBytes()[0])).toBe('bc');
+  await page.locator('#preset').selectOption('heart');
+  await page.locator('#lossSeg').selectOption('2');
+  await walk(page);
+  await expect(page.locator('#view svg.pimg')).toHaveCount(1);
+  await expect(page.locator('#expl')).toContainText('muestra la imagen');
+  expect(await page.evaluate(() => state.steps.some(s => s.k === 'retx'))).toBe(true);
+  await page.locator('#kind').selectOption('text');
+  await expect(page.locator('#msg')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test('flood step appears when enabled and all MACs are defined', async ({ page }) => {
   const errors = await open(page);
   await page.locator('#flood').check();
