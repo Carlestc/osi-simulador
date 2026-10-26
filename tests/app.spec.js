@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
-const URL = pathToFileURL(path.join(__dirname, 'index.html')).href;
+const URL = pathToFileURL(path.join(__dirname, '..', 'index.html')).href;
 
 async function open(page) {
   const errors = [];
@@ -76,6 +76,22 @@ test('image mode: 8 bytes, editable pixels, delivered image with loss', async ({
   expect(await page.evaluate(() => state.steps.some(s => s.k === 'retx'))).toBe(true);
   await page.locator('#kind').selectOption('text');
   await expect(page.locator('#msg')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('envelopes fly per segment and the segment tray shows delivery', async ({ page }) => {
+  const errors = await open(page);
+  await page.locator('#msg').fill('Mensaje largo de prueba');
+  await page.locator('#lossSeg').selectOption('2');
+  const total = await page.evaluate(() => state.steps.length);
+  let maxFly = 0;
+  for (let i = 1; i < total; i++) {
+    await page.locator('#next').click();
+    maxFly = Math.max(maxFly, await page.locator('#fly > g').count());
+  }
+  expect(maxFly).toBeGreaterThan(1);
+  await expect(page.locator('#seglane')).toContainText('entregados');
+  expect(await page.locator('.node svg, .node g[transform] path').count()).toBeGreaterThan(0);
   expect(errors).toEqual([]);
 });
 

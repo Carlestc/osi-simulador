@@ -66,6 +66,17 @@
   #token{transition:transform .9s ease-in-out}
   #token text{font-size:34px;text-anchor:middle}
   .hint{text-align:center;color:var(--muted);font-size:12px;margin-top:8px}
+  #fly{pointer-events:none}
+  .mini .me{font-size:22px;text-anchor:middle;dominant-baseline:central}
+  .mini .mn{font-size:12px;font-weight:800;fill:#fde047;stroke:#0f172a;stroke-width:3px;paint-order:stroke;text-anchor:middle}
+  #seglane{display:none;margin:6px 0;padding:6px 8px;background:#172338;border-radius:8px;font-size:13px}
+  #seglane.on{display:block}
+  #seglane .sum{color:var(--muted);margin-bottom:4px}
+  .sg{display:inline-block;margin:2px 3px 2px 0;padding:2px 7px;border-radius:12px;background:#243652;font-weight:700}
+  .sg.ok{background:#14532d}
+  .sg.lost{background:#7f1d1d}
+  .sg.retx{background:#78350f}
+  .sg.fly{background:#0c4a6e}
 </style>
 </head>
 <body>
@@ -119,6 +130,7 @@
       <span id="badge"></span>
       <div id="expl"></div>
       <div id="why"></div>
+      <div id="seglane"></div>
       <div id="view"></div>
     </div>
   </div>
@@ -265,6 +277,8 @@ function frameMacs(p,e){
 
 /* ---------- red SVG ---------- */
 function nodeWidth(n){return n.type==="switch"?132:n.type==="router"?160:154;}
+const ROUTER_SVG=`<line x1="-14" y1="-13" x2="-19" y2="-28" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round"/><line x1="14" y1="-13" x2="19" y2="-28" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round"/><circle cx="-19" cy="-29" r="2.8" fill="#38bdf8"/><circle cx="19" cy="-29" r="2.8" fill="#38bdf8"/><path d="M-22,-13h44a4,4 0 0 1 4,4v9a4,4 0 0 1 -4,4h-44a4,4 0 0 1 -4,-4v-9a4,4 0 0 1 4,-4z" fill="#0ea5e9" stroke="#075985" stroke-width="1.5"/><circle cx="-16" cy="-4.5" r="2" fill="#bbf7d0"/><circle cx="-9" cy="-4.5" r="2" fill="#fde047"/><circle cx="-2" cy="-4.5" r="2" fill="#bbf7d0"/><path d="M8,-4.5h12" stroke="#e0f2fe" stroke-width="2.5" stroke-linecap="round"/>`;
+const iconHTML=n=>n.type==="router"?`<svg width="30" height="26" viewBox="-28 -34 56 42" style="vertical-align:middle">${ROUTER_SVG}</svg>`:n.ic;
 function drawNetwork(){
   const t=getTopo(); let svg="";
   (t.zones||[]).forEach(z=>{svg+=`<rect class="zone" x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="14"/><text class="zlabel" x="${z.x+12}" y="${z.y+z.h-10}">${z.label}</text>`;});
@@ -275,10 +289,10 @@ function drawNetwork(){
     else if(n.ip){lines.push(n.ip);lines.push(n.mac)}
     else lines.push("(capa 2: solo MAC)");
     const h=62+lines.length*13;
-    svg+=`<g class="node" id="n_${k}"><rect x="${n.x-w/2}" y="${n.y-36}" width="${w}" height="${h}" rx="10"/><text class="ic" x="${n.x}" y="${n.y}">${n.ic}</text><text class="nm" x="${n.x}" y="${n.y+16}">${n.name}</text>${lines.map((ln,i)=>`<text class="ad" x="${n.x}" y="${n.y+32+i*13}">${ln}</text>`).join("")}</g>`;
+    svg+=`<g class="node" id="n_${k}"><rect x="${n.x-w/2}" y="${n.y-36}" width="${w}" height="${h}" rx="10"/>${n.type==="router"?`<g transform="translate(${n.x},${n.y})">${ROUTER_SVG}</g>`:`<text class="ic" x="${n.x}" y="${n.y}">${n.ic}</text>`}<text class="nm" x="${n.x}" y="${n.y+16}">${n.name}</text>${lines.map((ln,i)=>`<text class="ad" x="${n.x}" y="${n.y+32+i*13}">${ln}</text>`).join("")}</g>`;
   }
   const s=t.nodes[src()];
-  svg+=`<g id="token" style="transform:translate(${s.x}px,${s.y-52}px)"><text id="tokenIcon">✉️</text></g>`;
+  svg+=`<g id="token" style="transform:translate(${s.x}px,${s.y-52}px)"><text id="tokenIcon">✉️</text></g><g id="fly"></g>`;
   $("net").innerHTML=svg;
 }
 
@@ -322,7 +336,7 @@ function drawSignal(){
 function renderLayers(s){
   const n=getTopo().nodes[s.node],max=n.layers||1;
   const kind=n.type==="host"?"Host: procesa hasta la capa 7":n.type==="router"?"Router: procesa hasta la capa 3":"Switch: procesa solo la capa 2 (y 1)";
-  let html=`<div id="devnote">${n.ic} <b>${n.name}</b> · ${kind}</div>`;
+  let html=`<div id="devnote">${iconHTML(n)} <b>${n.name}</b> · ${kind}</div>`;
   if(state.model==="OSI"){
     html+=OSI.map(l=>`<div class="layer ${l.n<=max?'av':''} ${l.n===s.osi?'act':''}" style="border-color:${l.c}"><span><b>${l.n}</b> · ${l.name}</span><span class="pdu">${l.pdu}</span></div>`).join("");
   }else{
@@ -383,7 +397,7 @@ function buildSteps(){
         why:"Por eso las MAC cambian en cada salto pero las IP no."});
     }else{
       const tt=64-routers;
-      add({k:"arr",phase:"dec",node:key,pi:i,osi:1,pdu:1,mac,ttl:tt,txt:`${n.name} recibe la señal y la convierte en bits.`,why:"Empieza la desencapsulación: de capa 1 hacia arriba."});
+      add({k:"arr",phase:"dec",node:key,pi:i,osi:1,pdu:1,mac,ttl:tt,lost,txt:`${n.name} recibe la señal y la convierte en bits.`,why:"Empieza la desencapsulación: de capa 1 hacia arriba."});
       add({k:"dec",phase:"dec",node:key,pi:i,osi:2,pdu:2,mac,ttl:tt,lost,txt:`Enlace: la MAC destino es la mía y el CRC es correcto → quita la cabecera de trama.`,why:"Si el CRC falla, la trama se descarta."});
       add({k:"dec",phase:"dec",node:key,pi:i,osi:3,pdu:3,mac,ttl:tt,lost,txt:`Red: la IP destino ${ip[1]} es la mía → quita la cabecera IP.`,why:"Si la IP no fuera mía, no subiría más."});
       if(lost){
@@ -424,8 +438,55 @@ function highlight(s){
   }
 }
 const TOKENS={7:'✉️',6:'🔤',5:'🏷️',4:'📄',3:'📦',2:'🚚',1:'⚡'};
+let flyGen=0;
+function miniSVG(n){return `<g class="mini"><text class="me">✉️</text><text class="mn" y="14">${n}</text></g>`;}
+function animateFlight(s,prev,t){
+  const fly=$("fly"),tok=$("token"); if(!fly)return;
+  fly.innerHTML=""; flyGen++; const gen=flyGen; tok.style.opacity=1;
+  if(!prev||!s.pi||s.node===prev.node||prev.pi!==s.pi-1||!fly.animate)return;
+  if(!['sw','rin','r3','r2','arr','flood','retxhop','retxarr'].includes(s.k))return;
+  const p=route(),a=t.nodes[p[s.pi-1]],b=t.nodes[p[s.pi]];
+  const N=chunksOf().length;
+  let segs=s.only?[s.only]:(s.k==='retxarr'||s.k==='retxhop')&&state.lossSeg?[state.lossSeg]:Array.from({length:N},(_,i)=>i+1);
+  const gap=segs.length>1?Math.min(220,600/(segs.length-1)):0,dur=700;
+  tok.style.opacity=0;
+  segs.forEach((n,k)=>{
+    const g=document.createElementNS("http://www.w3.org/2000/svg","g");
+    g.innerHTML=miniSVG(n); fly.appendChild(g);
+    const dx=b.x-a.x,dy=b.y-a.y,lostHere=s.k==='arr'&&s.lost===n,f=lostHere?0.55:1;
+    g.style.opacity=0;
+    const anim=g.animate([
+      {transform:`translate(${a.x}px,${a.y-52}px)`,opacity:1},
+      {transform:`translate(${a.x+dx*f}px,${a.y-52+dy*f}px)`,opacity:lostHere?1:1}
+    ],{duration:dur,delay:k*gap,easing:"ease-in-out",fill:"both"});
+    if(lostHere)anim.onfinish=()=>{g.querySelector('.me').textContent="❌";g.animate([{opacity:1},{opacity:0}],{duration:600,fill:"forwards"});};
+  });
+  setTimeout(()=>{if(gen===flyGen){tok.style.opacity=1;}},dur+(segs.length-1)*gap+60);
+}
+function segStatus(s){
+  const N=chunksOf().length; if(s.k==='enc'&&s.osi>=5)return null;
+  const st=n=>{
+    if(s.k==='enc')return'ready';
+    if(s.lost===n&&['arr','dec','loss'].includes(s.k))return'lost';
+    if(s.k==='retx'||s.k==='retxhop')return n===state.lossSeg?'retx':'ok';
+    if(s.k==='retxarr')return'ok';
+    if(['arr','dec'].includes(s.k))return'ok';
+    return'fly';
+  };
+  return{N,st};
+}
+function renderSeglane(s){
+  const el=$("seglane"),r=segStatus(s);
+  if(!r){el.className="";el.innerHTML="";return;}
+  const ic={ready:'⏳',fly:'✈',ok:'✓',lost:'❌',retx:'🔁'},tx={ready:'listo',fly:'en camino',ok:'entregado',lost:'perdido',retx:'retransmitiendo'};
+  let h='',ok=0;
+  for(let n=1;n<=r.N;n++){const q=r.st(n);if(q==='ok')ok++;h+=`<span class="sg ${q}">${ic[q]} Seg ${n}: ${tx[q]}</span>`;}
+  el.className="on"; el.innerHTML=`<div class="sum">Segmentos enviados: ${r.N} · entregados: ${ok}/${r.N}</div>${h}`;
+}
 function renderStep(){
   const s=state.steps[state.i],t=getTopo(),np=t.nodes[s.node];
+  animateFlight(s,state.steps[state.i-1],t);
+  renderSeglane(s);
   document.querySelectorAll('.node').forEach(n=>n.classList.remove('act'));
   const gn=$("n_"+s.node); if(gn)gn.classList.add('act');
   highlight(s);

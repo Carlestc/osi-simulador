@@ -9,6 +9,7 @@ Es un único archivo, [`index.html`](./index.html), en HTML+CSS+JS puro. No nece
 1. Elige el **contenido**: un **texto** (máx. 30 caracteres) o una **imagen 8×8** (píxeles en blanco/negro; píxel a píxel con clic, o un ejemplo prediseñado). La imagen se codifica a 1 bit por píxel: cada fila = 1 byte, 8 bytes en total.
 2. Elige **topología** (LAN, dos redes con router, tres redes con ISP) y **destino**.
 3. Elige la vista **OSI (7 capas)** o **TCP/IP (4 capas)**.
+   Al viajar entre dispositivos, cada segmento se anima como un **sobre numerado** por el enlace, y una **bandeja de segmentos** indica cuáles están listos, en camino, entregados, perdidos o retransmitiéndose.
 4. Avanza con **Siguiente / Anterior**, o pulsa **Reproducir** (velocidad ajustable).
    Atajos: `←` `→` y `Espacio`.
 5. Opcional:
