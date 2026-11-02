@@ -4,6 +4,8 @@ Aplicación web educativa para 1SMR que muestra **cómo viaja un mensaje por la 
 
 Es un único archivo, [`index.html`](./index.html), en HTML+CSS+JS puro. No necesita servidor ni dependencias: basta abrirlo en el navegador.
 
+https://carlestc.github.io/osi-simulador/
+
 ## Uso
 
 1. Elige el **contenido**: un **texto** (máx. 30 caracteres) o una **imagen 8×8** (píxeles en blanco/negro; píxel a píxel con clic, o un ejemplo prediseñado). La imagen se codifica a 1 bit por píxel: cada fila = 1 byte, 8 bytes en total.
